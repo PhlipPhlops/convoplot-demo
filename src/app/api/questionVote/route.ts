@@ -2,14 +2,19 @@ export const dynamic = 'force-dynamic';
 import { MongoDBClient } from '../mongoclient';
 
 export async function POST(request: Request) {
-    const { question, vote } = await request.json();
+    const { question, vote, action } = await request.json();
 
-    if (!question || !vote) {
+    if (!question || (!vote && action !== 'delete')) {
         return new Response('Missing question or vote', { status: 400 });
     }
 
     const mongoClient = MongoDBClient.getInstance();
-    await mongoClient.saveQuestionVote(question, vote);
+
+    if (action === 'delete') {
+        await mongoClient.deleteQuestionVote(question);
+    } else {
+        await mongoClient.saveQuestionVote(question, vote);
+    }
 
     return new Response(JSON.stringify({ success: true }), {
         status: 200,

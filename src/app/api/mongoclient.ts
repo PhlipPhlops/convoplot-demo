@@ -120,6 +120,14 @@ export class MongoDBClient {
         return await collection.find().toArray();
     }
 
+    async deleteQuestionVote(question: string) {
+        if (!this.db) {
+            await this.connect();
+        }
+        const collection = this.db!.collection('votedQuestions');
+        await collection.deleteOne({ question });
+    }
+
     async vectorSearch(queryVector: number[], numCandidates: number, limit: number, selectedIDs?: string[]) {
         if (!this.db) {
             await this.connect();

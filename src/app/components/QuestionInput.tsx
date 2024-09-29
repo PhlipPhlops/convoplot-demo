@@ -86,6 +86,19 @@ export default function QuestionInput({ selectedIds, limit, onRelevantIdsUpdate 
     }
   };
 
+  const handleDeleteQuestion = async (questionToDelete: string) => {
+    try {
+      await fetch('/api/questionVote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: questionToDelete, action: 'delete' }),
+      });
+      fetchVotedQuestions();
+    } catch (error) {
+      console.error('Error deleting question:', error);
+    }
+  };
+
   const handlePreformattedQuestionClick = (q: string) => {
     setQuestion(q);
   };
@@ -113,13 +126,21 @@ export default function QuestionInput({ selectedIds, limit, onRelevantIdsUpdate 
         <h4 className="font-semibold mb-1">Well-performing questions:</h4>
         <div className="flex flex-wrap gap-2">
           {votedQuestions.filter(q => q.vote === 'good').map((q, index) => (
-            <button
-              key={index}
-              onClick={() => handlePreformattedQuestionClick(q.question)}
-              className="px-3 py-1 bg-gray-200 text-sm rounded hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
-            >
-              {q.question}
-            </button>
+            <div key={index} className="flex items-center bg-gray-200 rounded dark:bg-gray-700">
+              <button
+                onClick={() => handlePreformattedQuestionClick(q.question)}
+                className="px-3 py-1 text-sm hover:bg-gray-300 dark:hover:bg-gray-600"
+              >
+                {q.question}
+              </button>
+              <button
+                onClick={() => handleDeleteQuestion(q.question)}
+                className="px-2 py-1 text-sm text-red-500 hover:bg-gray-300 dark:hover:bg-gray-600"
+                title="Delete question"
+              >
+                ×
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -128,13 +149,21 @@ export default function QuestionInput({ selectedIds, limit, onRelevantIdsUpdate 
         <h4 className="font-semibold mb-1">Poor-performing questions:</h4>
         <div className="flex flex-wrap gap-2">
           {votedQuestions.filter(q => q.vote === 'poor').map((q, index) => (
-            <button
-              key={index}
-              onClick={() => handlePreformattedQuestionClick(q.question)}
-              className="px-3 py-1 bg-gray-200 text-sm rounded hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
-            >
-              {q.question}
-            </button>
+            <div key={index} className="flex items-center bg-gray-200 rounded dark:bg-gray-700">
+              <button
+                onClick={() => handlePreformattedQuestionClick(q.question)}
+                className="px-3 py-1 text-sm hover:bg-gray-300 dark:hover:bg-gray-600"
+              >
+                {q.question}
+              </button>
+              <button
+                onClick={() => handleDeleteQuestion(q.question)}
+                className="px-2 py-1 text-sm text-red-500 hover:bg-gray-300 dark:hover:bg-gray-600"
+                title="Delete question"
+              >
+                ×
+              </button>
+            </div>
           ))}
         </div>
       </div>
