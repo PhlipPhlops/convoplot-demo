@@ -137,7 +137,9 @@ export class MongoDBClient {
         }
         
         const conversationsCollection = this.db!.collection('conversations');
-        let pipeline: any[] = [];
+        // @ts-ignore
+        // eslint-disable-next-line
+        const pipeline: any[] = [];
 
         // Vector search stage (always first)
         pipeline.push({
