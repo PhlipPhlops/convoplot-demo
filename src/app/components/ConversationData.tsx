@@ -23,6 +23,7 @@ const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, releva
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const [allCollapsed, setAllCollapsed] = useState(false);
   const conversationRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
@@ -74,6 +75,15 @@ const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, releva
     });
   };
 
+  const toggleAllCollapse = () => {
+    if (allCollapsed) {
+      setCollapsedIds(new Set());
+    } else {
+      setCollapsedIds(new Set(conversations.map(c => c._id)));
+    }
+    setAllCollapsed(!allCollapsed);
+  };
+
   // New function to sort conversations
   const sortConversations = (conversations: Conversation[]) => {
     return conversations.sort((a, b) => {
@@ -94,51 +104,61 @@ const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, releva
   const sortedConversations = sortConversations(conversations);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-      {sortedConversations.map((conversation) => (
-        <div 
-          key={conversation._id} 
-          ref={(el) => { conversationRefs.current[conversation._id] = el }}
-          className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 overflow-hidden ${
-            relevantIds.includes(conversation._id) ? 'border-4 border-purple-500' : ''
-          }`}
+    <div>
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={toggleAllCollapse}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
         >
-          <div className="flex justify-between items-center mb-2">
-            {relevantIds.includes(conversation._id) && (
-              <p className="text-purple-500 italic text-sm">Relevant</p>
-            )}
-            <h3 className="text-lg font-semibold">Conversation <strong>{conversation._id.slice(-6)}</strong></h3>
-            <button
-              onClick={() => toggleCollapse(conversation._id)}
-              className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded"
-            >
-              {collapsedIds.has(conversation._id) ? 'Expand' : 'Collapse'}
-            </button>
-          </div>
-          {conversation.summary && (
-            <p className="text-sm mb-2 italic">{conversation.summary}</p>
-          )}
-          {!collapsedIds.has(conversation._id) && (
-            <div className="space-y-2">
-              {conversation.conversation.map((message, index) => (
-                <div
-                  key={index}
-                  className={`p-2 rounded-lg ${
-                    message.role === 'assistant' 
-                      ? 'bg-blue-100 dark:bg-blue-900 mr-8' 
-                      : 'bg-green-100 dark:bg-green-900 ml-8'
-                  }`}
-                >
-                  <div className="font-semibold text-xs mb-1">
-                    {message.role}
-                  </div>
-                  <p className="text-sm break-words">{message.content}</p>
-                </div>
-              ))}
+          {allCollapsed ? 'Expand All' : 'Collapse All Conversation into Summaries'}
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        {sortedConversations.map((conversation) => (
+          <div 
+            key={conversation._id} 
+            ref={(el) => { conversationRefs.current[conversation._id] = el }}
+            className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 overflow-hidden ${
+              relevantIds.includes(conversation._id) ? 'border-4 border-purple-500' : ''
+            }`}
+          >
+            <div className="flex justify-between items-center mb-2">
+              {relevantIds.includes(conversation._id) && (
+                <p className="text-purple-500 italic text-sm">Relevant</p>
+              )}
+              <h3 className="text-lg font-semibold">Conversation <strong>{conversation._id.slice(-6)}</strong></h3>
+              <button
+                onClick={() => toggleCollapse(conversation._id)}
+                className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded"
+              >
+                {collapsedIds.has(conversation._id) ? 'Expand' : 'Collapse'}
+              </button>
             </div>
-          )}
-        </div>
-      ))}
+            {conversation.summary && (
+              <p className="text-sm mb-2 italic">{conversation.summary}</p>
+            )}
+            {!collapsedIds.has(conversation._id) && (
+              <div className="space-y-2">
+                {conversation.conversation.map((message, index) => (
+                  <div
+                    key={index}
+                    className={`p-2 rounded-lg ${
+                      message.role === 'assistant' 
+                        ? 'bg-blue-100 dark:bg-blue-900 mr-8' 
+                        : 'bg-green-100 dark:bg-green-900 ml-8'
+                    }`}
+                  >
+                    <div className="font-semibold text-xs mb-1">
+                      {message.role}
+                    </div>
+                    <p className="text-sm break-words">{message.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
