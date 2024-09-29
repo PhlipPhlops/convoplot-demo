@@ -15,10 +15,11 @@ interface CoordinateMapProps {
   selectedIds: string[];
   setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
   limit: number;
-  relevantIds: string[];  // Add this line
+  relevantIds: string[];
+  onResetSelection: () => void;  // Add this line
 }
 
-const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedIds, limit, relevantIds }) => {
+const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedIds, limit, relevantIds, onResetSelection }) => {
   const [coordinates, setCoordinates] = useState<Coordinate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // Remove the unused state
@@ -98,7 +99,7 @@ const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedI
   const range = Math.max(Math.max(...allX) - Math.min(...allX), Math.max(...allY) - Math.min(...allY)) * 1.1;
 
   return (
-    <div className="w-full h-[400px] md:h-[600px]">
+    <div className="w-full h-[400px] md:h-[600px] relative">
       <Plot
         data={[
           createTrace(otherCoords, '#0000FF', 6, 0.7),
@@ -135,6 +136,12 @@ const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedI
         onSelected={handleSelection}
         onDeselect={handleDeselect}
       />
+      <button
+        className="absolute bottom-4 right-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        onClick={onResetSelection}
+      >
+        Reset Selection
+      </button>
     </div>
   );
 };
