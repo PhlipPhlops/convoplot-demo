@@ -7,6 +7,7 @@ import ConversationData from './components/ConversationData';
 import LimitDropdown from './components/LimitDropdown';
 import QuestionInput from './components/QuestionInput';
 import SelectedAndRelevantIdsDisplay from './components/SelectedAndRelevantIdsDisplay';
+import IntroductionText from './components/IntroductionText';
 
 // Dynamically import the CoordinateMap component
 const CoordinateMap = dynamic(() => import('./components/CoordinateMap'), { ssr: false });
@@ -32,17 +33,18 @@ const YourComponent: React.FC = () => {
         <div className="mt-4 overflow-hidden rounded-lg shadow-lg">
           <CoordinateMap selectedIds={selectedIds} setSelectedIds={setSelectedIds} limit={limit} relevantIds={relevantIds} />
         </div>
+        <IntroductionText />
+        <QuestionInput 
+          selectedIds={selectedIds} 
+          limit={limit} 
+          onRelevantIdsUpdate={handleRelevantIdsUpdate}
+        />
         <RelevantIdsDisplay relevantIds={relevantIds} onIdClick={handleIdClick} />
         <SelectedIdsDisplay selectedIds={selectedIds} onIdClick={handleIdClick} />
         <SelectedAndRelevantIdsDisplay 
           selectedIds={selectedIds} 
           relevantIds={relevantIds} 
           onIdClick={handleIdClick} 
-        />
-        <QuestionInput 
-          selectedIds={selectedIds} 
-          limit={limit} 
-          onRelevantIdsUpdate={handleRelevantIdsUpdate}
         />
         <ConversationData 
           selectedIds={selectedIds} 
