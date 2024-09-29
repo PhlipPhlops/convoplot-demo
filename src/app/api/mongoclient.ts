@@ -60,7 +60,7 @@ export class MongoDBClient {
             await this.connect();
         }
         const conversationsCollection = this.db!.collection('conversations');
-        const projection = { coordinates: 1, _id: 1 };
+        const projection = { coordinates: 1, _id: 1, summary: 1 };
         const query = { coordinates: { $ne: null } };
         if (limit) {
             return await conversationsCollection.find(query, { projection }).limit(limit).toArray() as unknown as ConversationDocument[];
@@ -74,8 +74,25 @@ export class MongoDBClient {
             await this.connect();
         }
         const objectIds = ids.map((id) => new ObjectId(id));
-        const projection = { coordinates: 1, _id: 1, conversation: 1, model:1 };
+        const projection = { coordinates: 1, _id: 1, conversation: 1, model:1, summary: 1 };
         const conversationsCollection = this.db!.collection('conversations');
         return await conversationsCollection.find({ _id: { $in: objectIds } }, { projection }).toArray() as unknown as ConversationDocument[];
+    }
+
+    async updateConversationSummary(docId: ObjectId, summary: string): Promise<{ _id: ObjectId, wasUpdated: boolean }> {
+        if (!this.db) {
+            await this.connect();
+        }
+        const collection = this.db!.collection<ConversationDocument>('conversations');
+        try {
+            const result = await collection.updateOne(
+                { _id: docId },
+                { $set: { summary: summary } }
+            );
+            return { _id: docId, wasUpdated: result.modifiedCount > 0 };
+        } catch (error) {
+            console.error(`Error updating document ${docId}:`, error);
+            return { _id: docId, wasUpdated: false };
+        }
     }
   }

@@ -3,12 +3,19 @@ import { MongoDBClient } from '../mongoclient';
 import { ConversationDocument } from '../types';
 import OpenAI from "openai";
 import { estimateTokens } from '../utilities';
+import { PromisePool } from '../promisepool';
 
 // const MAX_INPUT_TOKENS = 128000;
 // const MAX_OUTPUT_TOKENS = 16000;
 const GPT_4o_MINI = "gpt-4o-mini";
 const MAX_BATCH_TOKENS = 8000;
 const MAX_OUTPUT_TOKENS = 1000;
+
+interface SummaryResult {
+    docId: string;
+    summary: string;
+    wasUpdated: boolean;
+}
 
 /**
  * Endpoint
@@ -18,9 +25,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limit = Number(searchParams.get('limit')) || undefined;
     const ids = searchParams.get('ids')?.split(',') || [];
+    const saveToDocument = searchParams.get('saveToDocument') === 'true';
 
     const mongoClient = MongoDBClient.getInstance();
-    let documents: ConversationDocument[];
+    let documents: Pick<ConversationDocument, '_id' | 'conversation'>[];
 
     if (ids.length > 0) {
         documents = await mongoClient.getConversationsByIds(ids);
@@ -28,9 +36,9 @@ export async function GET(request: Request) {
         documents = await mongoClient.getConversations(limit);
     }
 
-    const summary = await summarize(documents);
+    const result = await summarize(documents, saveToDocument);
 
-    return new Response(JSON.stringify({ summary }), {
+    return new Response(JSON.stringify(result), {
         status: 200,
         headers: {
             'Content-Type': 'application/json'
@@ -38,12 +46,12 @@ export async function GET(request: Request) {
     });
 }
 
-async function summarize(documents: ConversationDocument[]): Promise<string> {
-    const batches: ConversationDocument[][] = [];
-    let currentBatch: ConversationDocument[] = [];
+async function summarize(documents: Pick<ConversationDocument, '_id' | 'conversation'>[], saveToDocument: boolean): Promise<SummaryResult[]> {
+    const batches: Pick<ConversationDocument, '_id' | 'conversation'>[][] = [];
+    let currentBatch: Pick<ConversationDocument, '_id' | 'conversation'>[] = [];
     let currentBatchTokens = 0;
 
-    // Split documents into batches
+    // Split documents into batches based on token count
     for (const doc of documents) {
         const docTokens = estimateTokens(doc.conversation.map(message => `${message.role}: ${message.content}`).join(' '));
         if (currentBatchTokens + docTokens > MAX_BATCH_TOKENS && currentBatch.length > 0) {
@@ -60,27 +68,31 @@ async function summarize(documents: ConversationDocument[]): Promise<string> {
 
     console.log(`Processing ${batches.length} batches...`);
 
-    // Process batches in parallel
-    const batchSummaries = await Promise.all(batches.map(processBatch));
+    // Use PromisePool to process batches
+    const pool = new PromisePool(5); // Adjust concurrency as needed
+    const batchResults = await Promise.all(
+        batches.map(batch => pool.add(() => processBatch(batch, saveToDocument)))
+    );
 
-    // Join all summaries
-    return batchSummaries.join('\n');
+    return batchResults.flat();
 }
 
-async function processBatch(batch: ConversationDocument[]): Promise<string> {
+async function processBatch(batch: Pick<ConversationDocument, '_id' | 'conversation'>[], saveToDocument: boolean): Promise<SummaryResult[]> {
     const openai = new OpenAI();
     const conversationsBlob = batch.map((doc) => doc.conversation.map((message) => `${message.role}: ${message.content}`).join(' ')).join(' --- NEXT CONVERSATION --- ');
 
     const prompt = `
-You are a helpful assistant that summarizes conversations. Conversations are separated by "--- NEXT CONVERSATION ---".
-Provide a single, unformatted bullet point for each conversation, describing only the main topic.
+You are a helpful assistant that summarizes conversations. Each conversation should be summarized in a single, concise bullet point.
+Conversations are separated by "--- NEXT CONVERSATION ---".
+Provide one bullet point for each conversation, describing only the main topic.
 If a conversation is inappropriate, mark it as "INAPPROPRIATE TO SUMMARIZE" instead of summarizing.
 Do not use any formatting or special characters other than the bullet point itself.
+Ensure that the number of bullet points matches the number of conversations.
 
 Conversations:
 ${conversationsBlob}
 
-Summary (unformatted bullet points only):
+Summary (one bullet point per line):
 `;
 
     const response = await openai.chat.completions.create({
@@ -91,5 +103,26 @@ Summary (unformatted bullet points only):
         max_tokens: MAX_OUTPUT_TOKENS,
     });
 
-    return response.choices[0].message.content || "Error summarizing conversations.";
+    const summaries = response.choices[0].message.content?.split('\n') || ["Error summarizing conversations."];
+
+    const mongoClient = MongoDBClient.getInstance();
+    let updatedCount = 0;
+    const results: SummaryResult[] = await Promise.all(
+        batch.map(async (doc, index) => {
+            const summary = summaries[index]?.trim() || "No summary available.";
+            if (saveToDocument) {
+                const { wasUpdated } = await mongoClient.updateConversationSummary(doc._id, summary);
+                if (wasUpdated) updatedCount++;
+                return { docId: doc._id.toString(), summary, wasUpdated };
+            } else {
+                return { docId: doc._id.toString(), summary, wasUpdated: false };
+            }
+        })
+    );
+
+    if (saveToDocument) {
+        console.log(`Batch processed: ${updatedCount}/${batch.length} documents updated`);
+    }
+
+    return results;
 }

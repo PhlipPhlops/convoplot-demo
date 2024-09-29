@@ -21,7 +21,6 @@ export default function Home() {
           <CoordinateMap selectedIds={selectedIds} setSelectedIds={setSelectedIds} limit={limit} />
         </div>
         <SelectedIdsDisplay selectedIds={selectedIds} />
-        <SummarizeSelectionButton selectedIds={selectedIds} />
         <ConversationData selectedIds={selectedIds} />
       </div>
     </div>

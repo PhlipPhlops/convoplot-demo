@@ -8,6 +8,7 @@ const Plot = dynamic(() => import('react-plotly.js').then(mod => mod.default), {
 interface Coordinate {
   _id: string;
   coordinates: [number, number];
+  summary?: string;
 }
 
 interface CoordinateMapProps {
@@ -19,7 +20,8 @@ interface CoordinateMapProps {
 const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedIds, limit }) => {
   const [coordinates, setCoordinates] = useState<Coordinate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [plotKey, setPlotKey] = useState(0);
+  // Remove the unused state
+  // const [plotKey, setPlotKey] = useState(0);
 
   useEffect(() => {
     const fetchCoordinates = async () => {
@@ -88,6 +90,10 @@ const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedI
                 selectedIds.includes(coord._id) ? 8 : 6
               ),
             },
+            text: coordinates.map(coord => 
+              coord.summary || `No summary: (${coord.coordinates[0].toFixed(2)}, ${coord.coordinates[1].toFixed(2)})`
+            ),
+            hoverinfo: 'text',
           },
         ]}
         layout={{

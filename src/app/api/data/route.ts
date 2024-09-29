@@ -4,7 +4,6 @@ import { MongoDBClient } from '../mongoclient';
  * Endpoint
  */
 export async function GET(request: Request) {
-    const mongoClient = MongoDBClient.getInstance();
     const { searchParams } = new URL(request.url);
     const dataType = searchParams.get('dataType');
     const limit = Number(searchParams.get('limit')) || undefined;
