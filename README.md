@@ -1,36 +1,17 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+*See this deployed at [slingshot-demo.vercel.app](https://slingshot-demo.vercel.app)*
 
-## Getting Started
+Welcome! I made this sketch to introduce you to how I think, and the type of tools I build, to handle problems like observing large amounts of conversation data, and using those insights to tune up my systems' performance. I build systems like this in production to maintain the AI moderation stack at the social media company I've been working with (I built that AI moderation stack too).
 
-First, run the development server:
+This sketch started as a conversation dataset on huggingface: [lmsys-chat-1m](https://huggingface.co/datasets/lmsys/lmsys-chat-1m), 1Million interactions with various chatbots in chatbot arena. I pared it down to 50,000 english language conversations with the vicuna-13b model (a fine-tuned Llama). I chose this number mostly so I could cram it into my free tier MongoDB cluster with some wiggle room for vector embedings.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+I summarized, embedded, and UMAP-reduced the data to give you the 2D scatterplot you see above. I like data maps like this; if you revisit it over time, you start to build a relationship with where you expect the data to fall on the map, and it gives you a nice spatial layout of a ton of conversations all at once. When tuned up, some clearer groupings start to form.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+You can make a selection by drawing a circle around datapoints on the map. This will render the conversations down below, so you can see them in full. You can ask questions or produce summaries about the selection, which will grab embedding-relevant conversations from the dataset alongside your selection. Little QA systems like this help explore the data, and gather up patterns as you explore your cursiosities.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Mark questions as performing well or performing poorly so we can start building a picture of the failure patterns of the system.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+I love working in this space, and I've found tools like this carry a lot of leverage when put to practice. Thanks for visiting!
 
-## Learn More
+– Phillip
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+*PS: A little game you could play: what question can you ask that will make for the highest overlap of Selected and Question-Relevant conversations?*
