@@ -12,6 +12,11 @@ export default function QuestionInput({ selectedIds, limit, onRelevantIdsUpdate 
   const [filterQuestion, setFilterQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const preformattedQuestions = [
+    "Please summarize the political discourse happening in these conversations",
+    "Is the assistant in these conversations successfully responding to the user?"
+  ];
+
   const handleAsk = async () => {
     if (!question.trim()) return;
 
@@ -45,6 +50,10 @@ export default function QuestionInput({ selectedIds, limit, onRelevantIdsUpdate 
     }
   };
 
+  const handlePreformattedQuestionClick = (q: string) => {
+    setQuestion(q);
+  };
+
   return (
     <div className="mt-4">
       <div className="flex">
@@ -63,6 +72,22 @@ export default function QuestionInput({ selectedIds, limit, onRelevantIdsUpdate 
           {isLoading ? 'Loading...' : 'Ask'}
         </button>
       </div>
+      
+      <div className="mt-2 text-right">
+        <h4 className="font-semibold mb-1">Well-performing questions:</h4>
+        <div className="flex flex-wrap gap-2 justify-end">
+          {preformattedQuestions.map((q, index) => (
+            <button
+              key={index}
+              onClick={() => handlePreformattedQuestionClick(q)}
+              className="px-3 py-1 bg-gray-200 text-sm rounded hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {(filterQuestion || answer) && (
         <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-800 rounded">
           {filterQuestion && (

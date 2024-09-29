@@ -1,9 +1,10 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 interface ConversationDataProps {
   selectedIds: string[];
-  relevantIds: string[];  // Add this line
+  relevantIds: string[];
+  scrollToId: string | null;
 }
 
 interface Message {
@@ -17,11 +18,12 @@ interface Conversation {
   summary: string;
 }
 
-const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, relevantIds }) => {
+const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, relevantIds, scrollToId }) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const conversationRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     const fetchConversations = async () => {
@@ -54,6 +56,12 @@ const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, releva
     fetchConversations();
   }, [selectedIds]);
 
+  useEffect(() => {
+    if (scrollToId && conversationRefs.current[scrollToId]) {
+      conversationRefs.current[scrollToId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [scrollToId]);
+
   const toggleCollapse = (id: string) => {
     setCollapsedIds(prev => {
       const newSet = new Set(prev);
@@ -79,6 +87,7 @@ const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, releva
       {conversations.map((conversation) => (
         <div 
           key={conversation._id} 
+          ref={(el) => conversationRefs.current[conversation._id] = el}
           className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 overflow-hidden ${
             relevantIds.includes(conversation._id) ? 'border-4 border-purple-500' : ''
           }`}
