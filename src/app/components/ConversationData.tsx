@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 
 interface ConversationDataProps {
   selectedIds: string[];
+  relevantIds: string[];  // Add this line
 }
 
 interface Message {
@@ -16,7 +17,7 @@ interface Conversation {
   summary: string;
 }
 
-const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds }) => {
+const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, relevantIds }) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,8 +77,16 @@ const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
       {conversations.map((conversation) => (
-        <div key={conversation._id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 overflow-hidden">
+        <div 
+          key={conversation._id} 
+          className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 overflow-hidden ${
+            relevantIds.includes(conversation._id) ? 'border-4 border-purple-500' : ''
+          }`}
+        >
           <div className="flex justify-between items-center mb-2">
+            {relevantIds.includes(conversation._id) && (
+              <p className="text-purple-500 italic text-sm">Relevant</p>
+            )}
             <h3 className="text-lg font-semibold">Conversation <strong>{conversation._id.slice(-6)}</strong></h3>
             <button
               onClick={() => toggleCollapse(conversation._id)}

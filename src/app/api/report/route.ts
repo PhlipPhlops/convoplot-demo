@@ -36,8 +36,7 @@ export async function GET(request: Request) {
         documents = await mongoClient.getConversations(limit);
     }
 
-    const filterQuestion = await generateFilterQuestion(question);
-    const relevantDocuments = await filterDocuments(documents, filterQuestion);
+    const relevantDocuments = await filterDocuments(documents, question);
     const answer = await answerQuestion(question, relevantDocuments);
 
     // Extract the document IDs from the relevant documents
@@ -45,7 +44,6 @@ export async function GET(request: Request) {
 
     return new Response(JSON.stringify({
         question,
-        filterQuestion,
         answer,
         relevantDocumentsCount: relevantDocuments.length,
         relevantDocumentIds: relevantDocumentIds
@@ -55,40 +53,17 @@ export async function GET(request: Request) {
     });
 }
 
-async function generateFilterQuestion(originalQuestion: string): Promise<string> {
-    const openai = new OpenAI();
-    const prompt = `
-Given the following question, create a yes/no filter question that can determine if any of the conversations in a batch is relevant to answering the original question.
+async function filterDocuments(documents: Pick<ConversationDocument, '_id' | 'conversation'>[], originalQuestion: string): Promise<Pick<ConversationDocument, '_id' | 'conversation'>[]> {
+    let relevantDocuments: Pick<ConversationDocument, '_id' | 'conversation'>[] = documents;
 
-Original question: "${originalQuestion}"
+    // Only apply batch filter if total tokens are above MAX_BATCH_SIZE
+    if (estimateTotalTokens(documents) > MAX_BATCH_SIZE) {
+        relevantDocuments = await batchFilter(documents, originalQuestion, 5); // Sample size of 5
+    }
 
-Your task is to generate a filter question. This filter question will be used to determine if a batch of conversations contains any relevant information to answer the original question.
-
-Inside the filter question, describe a few creative examples of things that MAY be relevant to answering the original question.
-
-Respond with a JSON object containing a single 'filterQuestion' property. The value should be the generated filter question.
-
-Your response must be a valid JSON object.`;
-
-    const response = await openai.chat.completions.create({
-        model: GPT_4o_MINI,
-        messages: [
-            { role: "system", content: prompt },
-        ],
-        response_format: { type: "json_object" },
-        max_tokens: 100,
-    });
-
-    const result = JSON.parse(response.choices[0].message.content || '{"filterQuestion": "Is this conversation relevant to the original question?"}');
-    return result.filterQuestion;
-}
-
-async function filterDocuments(documents: Pick<ConversationDocument, '_id' | 'conversation'>[], filterQuestion: string): Promise<Pick<ConversationDocument, '_id' | 'conversation'>[]> {
-    let relevantDocuments = await batchFilter(documents, filterQuestion, MAX_BATCH_SIZE);
-
-    // If the filtered documents are still too large, filter again with half the batch size
+    // Second stage: Individual document filtration if still above MAX_BATCH_SIZE
     if (estimateTotalTokens(relevantDocuments) > MAX_BATCH_SIZE) {
-        relevantDocuments = await batchFilter(relevantDocuments, filterQuestion, MAX_BATCH_SIZE / 2);
+        relevantDocuments = await individualFilter(relevantDocuments, originalQuestion);
     }
 
     return relevantDocuments;
@@ -96,27 +71,15 @@ async function filterDocuments(documents: Pick<ConversationDocument, '_id' | 'co
 
 async function batchFilter(
     documents: Pick<ConversationDocument, '_id' | 'conversation'>[],
-    filterQuestion: string,
-    batchSize: number
+    originalQuestion: string,
+    sampleSize: number
 ): Promise<Pick<ConversationDocument, '_id' | 'conversation'>[]> {
     const openai = new OpenAI();
     const batches: Pick<ConversationDocument, '_id' | 'conversation'>[][] = [];
-    let currentBatch: Pick<ConversationDocument, '_id' | 'conversation'>[] = [];
-    let currentBatchTokens = 0;
 
-    // Split documents into batches based on token count
-    for (const doc of documents) {
-        const docTokens = estimateTokens(doc.conversation.map(message => `${message.role}: ${message.content}`).join(' '));
-        if (currentBatchTokens + docTokens > batchSize && currentBatch.length > 0) {
-            batches.push(currentBatch);
-            currentBatch = [];
-            currentBatchTokens = 0;
-        }
-        currentBatch.push(doc);
-        currentBatchTokens += docTokens;
-    }
-    if (currentBatch.length > 0) {
-        batches.push(currentBatch);
+    // Split documents into batches of sampleSize
+    for (let i = 0; i < documents.length; i += sampleSize) {
+        batches.push(documents.slice(i, i + sampleSize));
     }
 
     const pool = new PromisePool(5); // Adjust concurrency as needed
@@ -128,12 +91,13 @@ async function batchFilter(
         ).join('\n\n--- NEXT CONVERSATION ---\n\n');
 
         const prompt = `
-${filterQuestion}
+Incoming question:
+${originalQuestion}
 
 Batch of conversations:
 ${batchText}
 
-Determine if any of the conversations in this batch are relevant to the filter question.
+Determine if any of the conversations in this batch could at all be useful in answering the incoming question.
 Return a JSON object with a single 'isRelevant' property. Set it to true if at least one conversation is relevant, false otherwise.
 
 Your response must be a valid JSON object.`;
@@ -161,6 +125,46 @@ function estimateTotalTokens(documents: Pick<ConversationDocument, '_id' | 'conv
         total + estimateTokens(doc.conversation.map(message => `${message.role}: ${message.content}`).join(' ')),
         0
     );
+}
+
+async function individualFilter(
+    documents: Pick<ConversationDocument, '_id' | 'conversation'>[],
+    originalQuestion: string
+): Promise<Pick<ConversationDocument, '_id' | 'conversation'>[]> {
+    const openai = new OpenAI();
+    const pool = new PromisePool(5); // Adjust concurrency as needed
+    const relevantDocuments: Pick<ConversationDocument, '_id' | 'conversation'>[] = [];
+
+    await Promise.all(documents.map(doc => pool.add(async () => {
+        const docText = doc.conversation.map(message => `${message.role}: ${message.content}`).join('\n');
+
+        const prompt = `
+${originalQuestion}
+
+Conversation:
+${docText}
+
+Determine if this conversation is relevant to the original question.
+Return a JSON object with a single 'isRelevant' property. Set it to true if the conversation is relevant, false otherwise.
+
+Your response must be a valid JSON object.`;
+
+        const response = await openai.chat.completions.create({
+            model: GPT_4o_MINI,
+            messages: [
+                { role: "system", content: prompt },
+            ],
+            response_format: { type: "json_object" },
+            max_tokens: 10,
+        });
+
+        const result = JSON.parse(response.choices[0].message.content || '{"isRelevant": false}');
+        if (result.isRelevant) {
+            relevantDocuments.push(doc);
+        }
+    })));
+
+    return relevantDocuments;
 }
 
 async function answerQuestion(question: string, documents: Pick<ConversationDocument, '_id' | 'conversation'>[]): Promise<string> {

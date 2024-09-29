@@ -15,9 +15,10 @@ interface CoordinateMapProps {
   selectedIds: string[];
   setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
   limit: number;
+  relevantIds: string[];  // Add this line
 }
 
-const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedIds, limit }) => {
+const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedIds, limit, relevantIds }) => {
   const [coordinates, setCoordinates] = useState<Coordinate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // Remove the unused state
@@ -84,10 +85,14 @@ const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedI
             mode: 'markers',
             marker: { 
               color: coordinates.map(coord => 
-                selectedIds.includes(coord._id) ? 'red' : 'blue'
+                relevantIds.includes(coord._id) ? '#9333ea' : // Purple color matching ConversationData.tsx
+                selectedIds.includes(coord._id) ? '#4ade80' : '#0000FF' // Comfortable green for selected, blue for default
               ),
               size: coordinates.map(coord => 
-                selectedIds.includes(coord._id) ? 8 : 6
+                relevantIds.includes(coord._id) || selectedIds.includes(coord._id) ? 10 : 6
+              ),
+              opacity: coordinates.map(coord => 
+                relevantIds.includes(coord._id) || selectedIds.includes(coord._id) ? 1 : 0.7
               ),
             },
             text: coordinates.map(coord => 
