@@ -74,6 +74,15 @@ const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, releva
     });
   };
 
+  // New function to sort conversations
+  const sortConversations = (conversations: Conversation[]) => {
+    return conversations.sort((a, b) => {
+      if (relevantIds.includes(a._id) && !relevantIds.includes(b._id)) return -1;
+      if (!relevantIds.includes(a._id) && relevantIds.includes(b._id)) return 1;
+      return 0;
+    });
+  };
+
   if (isLoading) {
     return <div className="text-center py-4">Loading conversation data...</div>;
   }
@@ -82,9 +91,11 @@ const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, releva
     return <div className="text-center py-4 text-red-500">Error: {error}</div>;
   }
 
+  const sortedConversations = sortConversations(conversations);
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-      {conversations.map((conversation) => (
+      {sortedConversations.map((conversation) => (
         <div 
           key={conversation._id} 
           ref={(el) => { conversationRefs.current[conversation._id] = el }}

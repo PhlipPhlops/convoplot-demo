@@ -73,7 +73,11 @@ export class MongoDBClient {
         if (!this.db) {
             await this.connect();
         }
-        const objectIds = ids.map((id) => new ObjectId(id));
+        const objectIds = ids.filter(id => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+        if (objectIds.length === 0) {
+            console.warn('No valid ObjectIds were provided');
+            return [];
+        }
         const projection = { coordinates: 1, _id: 1, conversation: 1, model:1, summary: 1 };
         const conversationsCollection = this.db!.collection('conversations');
         return await conversationsCollection.find({ _id: { $in: objectIds } }, { projection }).toArray() as unknown as ConversationDocument[];
@@ -95,4 +99,67 @@ export class MongoDBClient {
             return { _id: docId, wasUpdated: false };
         }
     }
-  }
+
+    async saveQuestionVote(question: string, vote: 'good' | 'poor') {
+        if (!this.db) {
+            await this.connect();
+        }
+        const collection = this.db!.collection('votedQuestions');
+        await collection.updateOne(
+            { question },
+            { $set: { vote } },
+            { upsert: true }
+        );
+    }
+
+    async getVotedQuestions() {
+        if (!this.db) {
+            await this.connect();
+        }
+        const collection = this.db!.collection('votedQuestions');
+        return await collection.find().toArray();
+    }
+
+    async vectorSearch(queryVector: number[], numCandidates: number, limit: number, selectedIDs?: string[]) {
+        if (!this.db) {
+            await this.connect();
+        }
+        if (limit > numCandidates) {
+            limit = numCandidates;
+        }
+        
+        const conversationsCollection = this.db!.collection('conversations');
+        let pipeline: any[] = [];
+
+        // Vector search stage (always first)
+        pipeline.push({
+            "$vectorSearch": {
+                "index": "vector_index",
+                "path": "embedding",
+                "queryVector": queryVector,
+                "numCandidates": numCandidates,
+                "limit": limit
+            }
+        });
+
+        // Filter by selectedIDs if provided
+        if (selectedIDs && selectedIDs.length > 0) {
+            const objectIds = selectedIDs.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id));
+            pipeline.push({ $match: { _id: { $in: objectIds } } });
+        }
+
+        // Apply limit
+        pipeline.push({ $limit: limit });
+
+        // Project stage
+        pipeline.push({
+            "$project": {
+                "_id": 1,
+                "coordinates": 1,
+                "summary": 1
+            }
+        });
+
+        return await conversationsCollection.aggregate(pipeline).toArray();
+    }
+}

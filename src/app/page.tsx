@@ -31,13 +31,13 @@ const YourComponent: React.FC = () => {
         <div className="mt-4 overflow-hidden rounded-lg shadow-lg">
           <CoordinateMap selectedIds={selectedIds} setSelectedIds={setSelectedIds} limit={limit} relevantIds={relevantIds} />
         </div>
+        <RelevantIdsDisplay relevantIds={relevantIds} onIdClick={handleIdClick} />
         <SelectedIdsDisplay selectedIds={selectedIds} onIdClick={handleIdClick} />
         <QuestionInput 
           selectedIds={selectedIds} 
           limit={limit} 
           onRelevantIdsUpdate={handleRelevantIdsUpdate}
         />
-        <RelevantIdsDisplay relevantIds={relevantIds} onIdClick={handleIdClick} />
         <ConversationData 
           selectedIds={selectedIds} 
           relevantIds={relevantIds} 

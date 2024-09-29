@@ -1,24 +1,20 @@
-export const dynamic = 'force-dynamic'; // static by default, unless reading the request
-
-/**
- * Endpoint
- */
-
 import { MongoDBClient } from '../mongoclient';
 import { ConversationDocument } from '../types';
 import OpenAI from "openai";
 import { estimateTokens } from '../utilities';
-import { PromisePool } from '../promisepool';
 
 const GPT_4o_MINI = "gpt-4o-mini";
-// const MAX_OUTPUT_TOKENS = 1000;
+const NUM_CANDIDATES = 50;
+const LIMIT = 5;
 const MAX_BATCH_SIZE = 16000; // Adjust this value as needed
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const question = searchParams.get('question');
-    const ids = searchParams.get('ids')?.split(',') || [];
-    const limit = Number(searchParams.get('limit')) || undefined;
+    const limit = Number(searchParams.get('limit')) || LIMIT;
+    const selectedIds = searchParams.get('selectedIds')?.split(',') || [];
+    const mongoClient = MongoDBClient.getInstance();
+    await mongoClient.connect();
 
     if (!question) {
         return new Response(JSON.stringify({ error: 'Question is required' }), {
@@ -27,162 +23,138 @@ export async function GET(request: Request) {
         });
     }
 
-    const mongoClient = MongoDBClient.getInstance();
-    let documents: Pick<ConversationDocument, '_id' | 'conversation'>[];
+    try {
+        // Generate embedding for the question
+        const embedding = await getEmbedding(question);
 
-    if (ids.length > 0) {
-        documents = await mongoClient.getConversationsByIds(ids);
-    } else {
-        documents = await mongoClient.getConversations(limit);
-    }
+        const searchResults = await mongoClient.vectorSearch(embedding, NUM_CANDIDATES, limit, selectedIds);
 
-    const relevantDocuments = await filterDocuments(documents, question);
-    const answer = await answerQuestion(question, relevantDocuments);
+        // Extract relevant document IDs
+        const relevantDocumentIds = searchResults.map(doc => doc._id.toString());
 
-    // Extract the document IDs from the relevant documents
-    const relevantDocumentIds = relevantDocuments.map(doc => doc._id.toString());
+        // Fetch full documents for the relevant IDs
+        const searchResultDocuments = await mongoClient.getConversationsByIds(relevantDocumentIds);
 
-    return new Response(JSON.stringify({
-        question,
-        answer,
-        relevantDocumentsCount: relevantDocuments.length,
-        relevantDocumentIds: relevantDocumentIds
-    }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-    });
-}
+        // Fetch all documents by selected IDs
+        const selectedDocuments = await mongoClient.getConversationsByIds(selectedIds);
 
-async function filterDocuments(documents: Pick<ConversationDocument, '_id' | 'conversation'>[], originalQuestion: string): Promise<Pick<ConversationDocument, '_id' | 'conversation'>[]> {
-    let relevantDocuments: Pick<ConversationDocument, '_id' | 'conversation'>[] = documents;
+        // Remove searchResult document ids from selectedDocuments
+        const filteredSelectedDocuments = selectedDocuments.filter(doc => 
+            !relevantDocumentIds.includes(doc._id.toString())
+        );
 
-    // Only apply batch filter if total tokens are above MAX_BATCH_SIZE
-    if (estimateTotalTokens(documents) > MAX_BATCH_SIZE) {
-        relevantDocuments = await batchFilter(documents, originalQuestion, 5); // Sample size of 5
-    }
+        // Combine searchResultDocuments and filteredSelectedDocuments
+        let allDocuments = [...searchResultDocuments, ...filteredSelectedDocuments];
 
-    // Second stage: Individual document filtration if still above MAX_BATCH_SIZE
-    if (estimateTotalTokens(relevantDocuments) > MAX_BATCH_SIZE) {
-        relevantDocuments = await individualFilter(relevantDocuments, originalQuestion);
-    }
+        // Downsample if necessary
+        allDocuments = downsampleDocuments(allDocuments, searchResultDocuments.length, MAX_BATCH_SIZE);
 
-    return relevantDocuments;
-}
+        // Generate answer based on relevant documents
+        const answer = await answerQuestion(question, allDocuments, searchResultDocuments.length);
 
-async function batchFilter(
-    documents: Pick<ConversationDocument, '_id' | 'conversation'>[],
-    originalQuestion: string,
-    sampleSize: number
-): Promise<Pick<ConversationDocument, '_id' | 'conversation'>[]> {
-    const openai = new OpenAI();
-    const batches: Pick<ConversationDocument, '_id' | 'conversation'>[][] = [];
-
-    // Split documents into batches of sampleSize
-    for (let i = 0; i < documents.length; i += sampleSize) {
-        batches.push(documents.slice(i, i + sampleSize));
-    }
-
-    const pool = new PromisePool(5); // Adjust concurrency as needed
-    const relevantDocuments: Pick<ConversationDocument, '_id' | 'conversation'>[] = [];
-
-    await Promise.all(batches.map(batch => pool.add(async () => {
-        const batchText = batch.map(doc => 
-            doc.conversation.map(message => `${message.role}: ${message.content}`).join('\n')
-        ).join('\n\n--- NEXT CONVERSATION ---\n\n');
-
-        const prompt = `
-Incoming question:
-${originalQuestion}
-
-Batch of conversations:
-${batchText}
-
-Determine if any of the conversations in this batch could at all be useful in answering the incoming question.
-Return a JSON object with a single 'isRelevant' property. Set it to true if at least one conversation is relevant, false otherwise.
-
-Your response must be a valid JSON object.`;
-
-        const response = await openai.chat.completions.create({
-            model: GPT_4o_MINI,
-            messages: [
-                { role: "system", content: prompt },
-            ],
-            response_format: { type: "json_object" },
-            max_tokens: 10,
+        return new Response(JSON.stringify({
+            question,
+            answer,
+            relevantDocumentsCount: allDocuments.length,
+            relevantDocumentIds
+        }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
         });
+    } catch (error) {
+        console.error('Error in GET request:', error);
+        let errorMessage = 'An unexpected error occurred.';
+        let statusCode = 500;
 
-        const result = JSON.parse(response.choices[0].message.content || '{"isRelevant": false}');
-        if (result.isRelevant) {
-            relevantDocuments.push(...batch);
+        if (error instanceof OpenAI.APIError && error.status === 429) {
+            errorMessage = 'OpenAI API rate limit exceeded. Please try again later.';
+            statusCode = 429;
         }
-    })));
 
-    return relevantDocuments;
+        return new Response(JSON.stringify({ error: errorMessage }), {
+            status: statusCode,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
 }
 
-function estimateTotalTokens(documents: Pick<ConversationDocument, '_id' | 'conversation'>[]): number {
+async function getEmbedding(text: string): Promise<number[]> {
+    const openai = new OpenAI();
+    const response = await openai.embeddings.create({
+        model: "text-embedding-3-small",
+        input: text,
+        encoding_format: "float",
+        dimensions: 256, // Using 256 dimensions for speed
+    });
+    return response.data[0].embedding;
+}
+
+/**
+ * Downsamples the documents to fit within the maximum batch size.
+ * @param documents - The documents to downsample.
+ * @param searchResultCount - The first N documents are highly relevant.
+ * @param maxBatchSize - The maximum batch size.
+ * @returns 
+ */
+function downsampleDocuments(
+    documents: ConversationDocument[], 
+    searchResultCount: number, 
+    maxBatchSize: number
+): ConversationDocument[] {
+    let totalTokens = estimateTotalTokens(documents);
+    const selectedDocuments = documents.slice(0, searchResultCount);
+    let remainingDocuments = documents.slice(searchResultCount);
+
+    while (totalTokens > maxBatchSize && remainingDocuments.length > 0) {
+        remainingDocuments = remainingDocuments.filter((_, index) => index % 2 === 0);
+        const newDocuments = [...selectedDocuments, ...remainingDocuments];
+        totalTokens = estimateTotalTokens(newDocuments);
+        if (totalTokens <= maxBatchSize) {
+            return newDocuments;
+        }
+    }
+
+    return selectedDocuments;
+}
+
+function estimateTotalTokens(documents: ConversationDocument[]): number {
     return documents.reduce((total, doc) => 
         total + estimateTokens(doc.conversation.map(message => `${message.role}: ${message.content}`).join(' ')),
         0
     );
 }
 
-async function individualFilter(
-    documents: Pick<ConversationDocument, '_id' | 'conversation'>[],
-    originalQuestion: string
-): Promise<Pick<ConversationDocument, '_id' | 'conversation'>[]> {
+async function answerQuestion(
+    question: string, 
+    documents: ConversationDocument[], 
+    searchResultCount: number
+): Promise<string> {
     const openai = new OpenAI();
-    const pool = new PromisePool(5); // Adjust concurrency as needed
-    const relevantDocuments: Pick<ConversationDocument, '_id' | 'conversation'>[] = [];
-
-    await Promise.all(documents.map(doc => pool.add(async () => {
-        const docText = doc.conversation.map(message => `${message.role}: ${message.content}`).join('\n');
-
-        const prompt = `
-${originalQuestion}
-
-Conversation:
-${docText}
-
-Determine if this conversation is relevant to the original question.
-Return a JSON object with a single 'isRelevant' property. Set it to true if the conversation is relevant, false otherwise.
-
-Your response must be a valid JSON object.`;
-
-        const response = await openai.chat.completions.create({
-            model: GPT_4o_MINI,
-            messages: [
-                { role: "system", content: prompt },
-            ],
-            response_format: { type: "json_object" },
-            max_tokens: 10,
-        });
-
-        const result = JSON.parse(response.choices[0].message.content || '{"isRelevant": false}');
-        if (result.isRelevant) {
-            relevantDocuments.push(doc);
-        }
-    })));
-
-    return relevantDocuments;
-}
-
-async function answerQuestion(question: string, documents: Pick<ConversationDocument, '_id' | 'conversation'>[]): Promise<string> {
-    const openai = new OpenAI();
-    const conversationsBlob = documents.map((doc) => doc.conversation.map((message) => `${message.role}: ${message.content}`).join('\n')).join('\n\n--- NEXT CONVERSATION ---\n\n');
+    const searchResultBlob = documents.slice(0, searchResultCount)
+        .map((doc) => doc.conversation.map((message) => `${message.role}: ${message.content}`).join('\n'))
+        .join('\n\n--- NEXT HIGHLY RELEVANT CONVERSATION ---\n\n');
+    
+    const otherDocumentsBlob = documents.slice(searchResultCount)
+        .map((doc) => doc.conversation.map((message) => `${message.role}: ${message.content}`).join('\n'))
+        .join('\n\n--- NEXT CONVERSATION ---\n\n');
 
     const prompt = `
-You are an extremely clever and succinct assitant that answers questions based on the provided conversations.
+You are an extremely clever and succinct assistant that answers questions based on the provided conversations.
 All "documents" refer to conversations between a user and an AI assistant.
 Use the information from the conversations to answer the question as accurately and helpfully as possible.
 You must answer the question or obey the request truthfully and accurately using ONLY information from the conversations provided as insight. If the answer is not in the conversations, say so.
+
+SPECIAL EMPHASIS: The first ${searchResultCount} conversations are highly relevant to the question. Pay extra attention to these conversations when formulating your answer.
 
 You MUST answer the question, and provide no other information.
 
 Question: ${question}
 
-Conversations:
-${conversationsBlob}
+Highly Relevant Conversations:
+${searchResultBlob}
+
+Other Conversations:
+${otherDocumentsBlob}
 
 ---
 Question, repeated: ${question}

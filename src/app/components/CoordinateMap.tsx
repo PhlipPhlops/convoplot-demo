@@ -64,42 +64,46 @@ const CoordinateMap: React.FC<CoordinateMapProps> = ({ selectedIds, setSelectedI
     );
   }
 
-  const xValues = coordinates.map(coord => coord.coordinates[0]);
-  const yValues = coordinates.map(coord => coord.coordinates[1]);
+  // Split coordinates into three groups
+  const relevantCoords = coordinates.filter(coord => relevantIds.includes(coord._id));
+  const selectedCoords = coordinates.filter(coord => selectedIds.includes(coord._id) && !relevantIds.includes(coord._id));
+  const otherCoords = coordinates.filter(coord => !relevantIds.includes(coord._id) && !selectedIds.includes(coord._id));
+
+  // Helper function to create a trace
+  const createTrace = (coords: Coordinate[], color: string, size: number, opacity: number) => ({
+    x: coords.map(coord => coord.coordinates[0]),
+    y: coords.map(coord => coord.coordinates[1]),
+    type: 'scatter' as const,
+    mode: 'markers' as const,
+    marker: { 
+      color,
+      size,
+      opacity,
+      line: {
+        color: 'white',
+        width: 1
+      }
+    },
+    text: coords.map(coord => 
+      coord.summary || `No summary: (${coord.coordinates[0].toFixed(2)}, ${coord.coordinates[1].toFixed(2)})`
+    ),
+    hoverinfo: 'text' as const,
+  });
 
   // Calculate the center and range of the coordinates
-  const xCenter = (Math.min(...xValues) + Math.max(...xValues)) / 2;
-  const yCenter = (Math.min(...yValues) + Math.max(...yValues)) / 2;
-  const xRange = Math.max(...xValues) - Math.min(...xValues);
-  const yRange = Math.max(...yValues) - Math.min(...yValues);
-  const range = Math.max(xRange, yRange) * 1.1; // Add 10% padding
+  const allX = coordinates.map(coord => coord.coordinates[0]);
+  const allY = coordinates.map(coord => coord.coordinates[1]);
+  const xCenter = (Math.min(...allX) + Math.max(...allX)) / 2;
+  const yCenter = (Math.min(...allY) + Math.max(...allY)) / 2;
+  const range = Math.max(Math.max(...allX) - Math.min(...allX), Math.max(...allY) - Math.min(...allY)) * 1.1;
 
   return (
     <div className="w-full h-[400px] md:h-[600px]">
       <Plot
         data={[
-          {
-            x: xValues,
-            y: yValues,
-            type: 'scatter',
-            mode: 'markers',
-            marker: { 
-              color: coordinates.map(coord => 
-                relevantIds.includes(coord._id) ? '#9333ea' : // Purple color matching ConversationData.tsx
-                selectedIds.includes(coord._id) ? '#4ade80' : '#0000FF' // Comfortable green for selected, blue for default
-              ),
-              size: coordinates.map(coord => 
-                relevantIds.includes(coord._id) || selectedIds.includes(coord._id) ? 10 : 6
-              ),
-              opacity: coordinates.map(coord => 
-                relevantIds.includes(coord._id) || selectedIds.includes(coord._id) ? 1 : 0.7
-              ),
-            },
-            text: coordinates.map(coord => 
-              coord.summary || `No summary: (${coord.coordinates[0].toFixed(2)}, ${coord.coordinates[1].toFixed(2)})`
-            ),
-            hoverinfo: 'text',
-          },
+          createTrace(otherCoords, '#0000FF', 6, 0.7),
+          createTrace(selectedCoords, '#4ade80', 10, 1),
+          createTrace(relevantCoords, '#9333ea', 10, 1),
         ]}
         layout={{
           title: 'UMAP clustering of Conversation Data',
