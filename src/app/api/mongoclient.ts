@@ -137,7 +137,6 @@ export class MongoDBClient {
         }
         
         const conversationsCollection = this.db!.collection('conversations');
-        // @ts-ignore
         // eslint-disable-next-line
         const pipeline: any[] = [];
 
