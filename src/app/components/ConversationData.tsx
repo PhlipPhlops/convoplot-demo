@@ -87,7 +87,7 @@ const ConversationData: React.FC<ConversationDataProps> = ({ selectedIds, releva
       {conversations.map((conversation) => (
         <div 
           key={conversation._id} 
-          ref={(el) => conversationRefs.current[conversation._id] = el}
+          ref={(el) => { conversationRefs.current[conversation._id] = el }}
           className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 overflow-hidden ${
             relevantIds.includes(conversation._id) ? 'border-4 border-purple-500' : ''
           }`}

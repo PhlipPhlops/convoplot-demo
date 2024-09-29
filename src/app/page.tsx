@@ -5,7 +5,6 @@ import SelectedIdsDisplay from './components/SelectedIdsDisplay';
 import RelevantIdsDisplay from './components/RelevantIdsDisplay';
 import ConversationData from './components/ConversationData';
 import LimitDropdown from './components/LimitDropdown';
-import SummarizeSelectionButton from './components/SummarizeSelectionButton';
 import QuestionInput from './components/QuestionInput';
 
 // Dynamically import the CoordinateMap component
