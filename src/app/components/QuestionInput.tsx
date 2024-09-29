@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 interface QuestionInputProps {
   selectedIds: string[];
@@ -184,7 +185,9 @@ export default function QuestionInput({ selectedIds, limit, onRelevantIdsUpdate 
           ) : answer && (
             <div>
               <h3 className="font-bold mb-2">Answer:</h3>
-              <p>{answer}</p>
+              <ReactMarkdown className="prose dark:prose-invert max-w-none">
+                {answer}
+              </ReactMarkdown>
               <div className="mt-2">
                 <button
                   onClick={() => handleVote('good')}

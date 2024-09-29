@@ -6,6 +6,7 @@ import RelevantIdsDisplay from './components/RelevantIdsDisplay';
 import ConversationData from './components/ConversationData';
 import LimitDropdown from './components/LimitDropdown';
 import QuestionInput from './components/QuestionInput';
+import SelectedAndRelevantIdsDisplay from './components/SelectedAndRelevantIdsDisplay';
 
 // Dynamically import the CoordinateMap component
 const CoordinateMap = dynamic(() => import('./components/CoordinateMap'), { ssr: false });
@@ -33,6 +34,11 @@ const YourComponent: React.FC = () => {
         </div>
         <RelevantIdsDisplay relevantIds={relevantIds} onIdClick={handleIdClick} />
         <SelectedIdsDisplay selectedIds={selectedIds} onIdClick={handleIdClick} />
+        <SelectedAndRelevantIdsDisplay 
+          selectedIds={selectedIds} 
+          relevantIds={relevantIds} 
+          onIdClick={handleIdClick} 
+        />
         <QuestionInput 
           selectedIds={selectedIds} 
           limit={limit} 
